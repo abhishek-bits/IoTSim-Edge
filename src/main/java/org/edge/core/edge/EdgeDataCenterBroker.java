@@ -21,11 +21,12 @@ import org.edge.entity.ConnectionHeader.Direction;
 import org.edge.entity.DevicesInfo;
 import org.edge.exception.MicroElementNotFoundException;
 import org.edge.utils.LogUtil;
+import org.edge.utils.TraceUtil;
 
 /**
  * this a network manager and decision maker for setting up connection and event
  * transferring.
- * 
+ *
  * @author cody
  *
  */
@@ -49,67 +50,111 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 
 	@Override
 	public void processEvent(SimEvent ev) {
+
 		switch (ev.getTag()) {
-		// Resource characteristics request
-		case CloudSimTags.RESOURCE_CHARACTERISTICS_REQUEST:
-			this.processResourceCharacteristicsRequest(ev);
-			break;
-		// Resource characteristics answer
-		case CloudSimTags.RESOURCE_CHARACTERISTICS:
-			this.processResourceCharacteristics(ev);
-			break;
-		// VM Creation answer
-		case CloudSimTags.VM_CREATE_ACK:
-			this.processVmCreate(ev);
-			this.initializeNetWorkConnection(ev);
-			break;
-		// A finished cloudlet returned
-		case CloudSimTags.CLOUDLET_RETURN:
-			this.processCloudletReturn(ev);
-			// LogUtil.info("actuing");
-			dataShrinkAndSendToDownLink(ev);
-			//this.actuating(ev);
-			break;
-		// if the simulation finishes
-		case CloudSimTags.END_OF_SIMULATION:
-			this.shutdownEntity();
-			break;
-		// other unknown tags are processed by this method
-		default:
-			this.processOtherEvent(ev);
-			break;
+			// Resource characteristics request
+			case CloudSimTags.RESOURCE_CHARACTERISTICS_REQUEST:
+				this.processResourceCharacteristicsRequest(ev);
+				break;
+			// Resource characteristics answer
+			case CloudSimTags.RESOURCE_CHARACTERISTICS:
+				this.processResourceCharacteristics(ev);
+				break;
+			// VM Creation answer
+			case CloudSimTags.VM_CREATE_ACK:
+				this.processVmCreate(ev);
+				this.initializeNetWorkConnection(ev);
+				break;
+			// A finished cloudlet returned
+			case CloudSimTags.CLOUDLET_RETURN:
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.processEvent() -> EdgeDataCenterBroker.processCloudletReturn()");
+
+				this.processCloudletReturn(ev);
+
+				// LogUtil.info("actuing");
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.processEvent() -> EdgeDataCenterBroker.dataShrinkAndSendToDownLink()");
+
+				dataShrinkAndSendToDownLink(ev);
+				//this.actuating(ev);
+				break;
+			// if the simulation finishes
+			case CloudSimTags.END_OF_SIMULATION:
+				this.shutdownEntity();
+				break;
+			// other unknown tags are processed by this method
+			default:
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.processEvent() -> EdgeDataCenterBroker.processOtherEvent()");
+
+				this.processOtherEvent(ev);
+				break;
 		}
 	}
 
 	/**
 	 * submit edgelets to its downlink
-	 * 
+	 *
 	 * @param ev
 	 */
 	private void dataShrinkAndSendToDownLink(SimEvent ev) {
 		// TODO transfer Data To the VMs children
 
+		TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> EdgeLet.getData()");
+
 		EdgeLet data = (EdgeLet) ev.getData();
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> EdgeLet.getVmId()");
+
 		int vmId = data.getVmId();
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> DatacenterBroker.getVmList()");
+
 		List<Vm> vmList2 = getVmList();
+
 		MicroELement findFirst = (MicroELement) vmList2.stream().filter(t -> t.getId() == vmId).findFirst()
 				.orElseThrow(MicroElementNotFoundException::new);
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> MicroElement.getDownLink()");
+
 		List<MicroELement> downLink = findFirst.getDownLink();
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> " +
+				"MicroElement.getEdgeOperation().getShrinkingFactor()");
+
 		double shrinkingFactor = findFirst.getEdgeOperation().getShinkingFactor();
+
 		for (MicroELement microELement : downLink) {
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> EdgeLet.newInstance()");
+
 			EdgeLet newInstance = data.newInstance(IoTDevice.cloudLetId++, shrinkingFactor);
-			
+
 			// added by Areeb
 			LogUtil.info("microELement.getId() " + microELement.getId());
-			
-			
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> MicroElement.getId()");
+
 			data.getConnectionHeader().vmId=microELement.getId();
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> EdgeLet.setConnectionHeader()");
+
 			newInstance.setConnectionHeader(data.getConnectionHeader());
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> EdgeLet.setVmId()");
+
 			newInstance.setVmId(microELement.getId());
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> EdgeLet.setUserId()");
+
 			newInstance.setUserId(this.getId());
-			
+
 			LogUtil.info("shrinked Edgelet " + newInstance.getCloudletId() + " sent from microELement "
 					+ findFirst.getId() + " to microELement " + microELement.getId());
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> SimEntity.send()");
+
 			this.send(getId(), 0, EdgeState.SENDING_TO_EDGE, newInstance);
 
 		}
@@ -117,7 +162,11 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 
 	@Override
 	protected void processCloudletReturn(SimEvent ev) {
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.processCloudletReturn() -> EdgeLet.getData()");
+
 		EdgeLet cloudlet = (EdgeLet) ev.getData();
+
 		this.getCloudletReceivedList().add(cloudlet);
 		Log.printLine(CloudSim.clock() + ": " + getName() + ": Cloudlet " + cloudlet.getCloudletId() + " received");
 		this.cloudletsSubmitted--;
@@ -160,7 +209,7 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 
 				availiableDevice.addPendingResponse(let);
 
-			
+
 			}
 			// send(connectionHeader.ioTId, networkDelay, EdgeState.REQUEST_ACTUATING, let);
 		}
@@ -220,7 +269,7 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 	 * @param connectionHeader
 	 */
 	private void updateHostBattery(ConnectionHeader connectionHeader) {
-		
+
 		EdgeDataCenter entity = (EdgeDataCenter) CloudSim
 				.getEntity(this.getVmsToDatacentersMap().get(connectionHeader.vmId));
 		List<Host> hostList = entity.getHostList();
@@ -229,14 +278,14 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 			for (Vm vm : vmList2) {
 				if (vm.getId() == connectionHeader.vmId) {
 					EdgeDevice device = (EdgeDevice) host;
-					
+
 					//(double fileSize, double shrinkFactor,double drangeRateForProcess,double drangeRateForSending)
 					double shrik=0.1;
 					if(vm.getId()==1)
-					device.updateBatteryByProcessingCloudLetAndSend(1000, shrik,0.1,0.6);
+						device.updateBatteryByProcessingCloudLetAndSend(1000, shrik,0.1,0.6);
 					else
 						device.updateBatteryByProcessingCloudLetAndSend2(1000, shrik,0.1,0.6);
-					
+
 				}
 			}
 		}
@@ -245,7 +294,7 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 	private boolean checkAvailiability(ConnectionHeader connectionInfo) {
 		EdgeDataCenter entity = (EdgeDataCenter) CloudSim
 				.getEntity(this.getVmsToDatacentersMap().get(connectionInfo.vmId));
-		
+
 		//LogUtil.info("connectionInfo.vmId " + connectionInfo.vmId);
 		List<Host> hostList = entity.getHostList();
 		EdgeDevice device = null;
@@ -294,39 +343,43 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 		// super.processOtherEvent(ev);
 
 		switch (ev.getTag()) {
-		case EdgeState.INITILIZE_CONNECTION:
-			this.setupConnection(ev);
-			break;
-		case EdgeState.REQUEST_CONNECTION:
-			this.requestConnection(ev);
+			case EdgeState.INITILIZE_CONNECTION:
+				this.setupConnection(ev);
+				break;
+			case EdgeState.REQUEST_CONNECTION:
+				this.requestConnection(ev);
 
-			break;
-		case EdgeState.CONNECTING_ACK:
+				break;
+			case EdgeState.CONNECTING_ACK:
 
-			ConnectionHeader header = (ConnectionHeader) ev.getData();
-			if (header.getSourceType()) {
-				LogUtil.info("broker received  connection ack  from ioT " + header.ioTId);
-				this.processConnectionAckFromIoT(ev);
-			} else {
-				LogUtil.info("broker received  connection ack  from vm " + header.vmId);
-				this.processConnectionAckFromEdge(ev);
-			}
+				ConnectionHeader header = (ConnectionHeader) ev.getData();
+				if (header.getSourceType()) {
+					LogUtil.info("broker received  connection ack  from ioT " + header.ioTId);
+					this.processConnectionAckFromIoT(ev);
+				} else {
+					LogUtil.info("broker received  connection ack  from vm " + header.vmId);
+					this.processConnectionAckFromEdge(ev);
+				}
 
-			break;
-		case EdgeState.REQUEST_DISCONNECTION:
-			DevicesInfo info2 = (DevicesInfo) ev.getData();
-			this.removeConnection(info2);
-			break;
+				break;
+			case EdgeState.REQUEST_DISCONNECTION:
+				DevicesInfo info2 = (DevicesInfo) ev.getData();
+				this.removeConnection(info2);
+				break;
 
-		case EdgeState.BATTERY_DRAINED:
-			DevicesInfo info3 = (DevicesInfo) ev.getData();
-			LogUtil.info("networkManager: remove iot device " + info3.ioTDeviceId + "'s connection");
-			this.removeConnection(info3);
-			break;
+			case EdgeState.BATTERY_DRAINED:
+				DevicesInfo info3 = (DevicesInfo) ev.getData();
+				LogUtil.info("networkManager: remove iot device " + info3.ioTDeviceId + "'s connection");
+				this.removeConnection(info3);
+				break;
 
-		case EdgeState.SENDING_TO_EDGE:
-			this.sendingDataToEdge(ev);
-			break;
+			case EdgeState.SENDING_TO_EDGE:
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.processOtherEvent() -> "+
+						"EdgeDataCenterBroker.sendingDataToEdge()");
+
+				this.sendingDataToEdge(ev);
+				break;
 
 		}
 
@@ -334,38 +387,44 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 
 	private void sendingDataToEdge(SimEvent ev) {
 
+		TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeLet.getData()");
+
 		EdgeLet data = (EdgeLet) ev.getData();
-		
-		
-		
-		
+
 		// added by areeb to fix the problem if the header that is not fixed in sending from ML to ML
 		LogUtil.info("VMiD "+data.getVmId());
 		LogUtil.info("VMiD c "+data.getConnectionHeader().vmId);
-		
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeLet.getVmId()");
+
 		data.getConnectionHeader().vmId=data.getVmId();
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeDataCenterBroker.checkAvailiability()");
+
 		boolean available = this.checkAvailiability(data.getConnectionHeader());
-		
-		
+
 		if (available) {
 			LogUtil.info(CloudSim.clock() + " broker received edgeLet " + data.getCloudletId() + " from iot "
 					+ data.getConnectionHeader().ioTId + " and send it to VM " + data.getConnectionHeader().vmId);
 			List<EdgeLet> list = new ArrayList<>();
 			list.add(data);
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> DataCenterBroker.submitCloudletList()");
+
 			this.submitCloudletList(list);
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeDataCenterBroker.submitCloudlets()");
+
 			this.submitCloudlets(data.getConnectionHeader());
 
-		} 
-		
-		
+		} else {
 
-		else {
-			
 			LogUtil.info("Not Aval 1");
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeDataCenterBroker.findAvailiableDevice()");
+
 			EdgeDevice availableDevice = this.findAvailiableDevice(data.getConnectionHeader());
-			
-			
-			
+
 			if (availableDevice != null) {
 				// EdgeDataCenter entity = (EdgeDataCenter)
 				// CloudSim.getEntity(getVmsToDatacentersMap().get(data.getConnectionHeader().vmId));
@@ -377,37 +436,67 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 						+ data.getConnectionHeader().ioTId + " and its connection has switched to edge "
 						+ availableDevice.getId());
 
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeLet.setVmId()");
+
 				data.setVmId(availableDevice.getVmList().get(0).getId());
 				List<EdgeLet> list = new ArrayList<>();
 				list.add(data);
 
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeLet.getVmId()");
+
 				int vmId = data.getVmId();
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> Vm.getId()");
+
 				// increase the edgelet size by a factor of "increasingFactor"
 				MicroELement findFirst = (MicroELement) getVmList().stream().filter(vm -> vm.getId() == vmId)
 						.findFirst().orElseThrow(MicroElementNotFoundException::new);
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> "+
+						"MicroElement.getEdgeOperation().getIncreasingFactor()");
+
 				double increasingFactor = findFirst.getEdgeOperation().getIncreasingFactor();
 
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeLet.setCloudletLength()");
+
 				data.setCloudletLength(data.getCloudletLength() * increasingFactor);
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> DataCenterBroker.submitCloudletList()");
+
 				this.submitCloudletList(list);
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeDataCenterBroker.submitCloudlets()");
+
 				this.submitCloudlets(data.getConnectionHeader());
 				return;
-			} 
-			 
-			else {
+
+			} else {
 				LogUtil.info("Not Aval 2");
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> CloudSim.getEntity()");
+
 				EdgeDataCenter entity = (EdgeDataCenter) CloudSim
 						.getEntity(this.getVmsToDatacentersMap().get(data.getConnectionHeader().vmId));
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeDataCenter.getHostList()");
+
 				List<Host> hostList = entity.getHostList();
+
 				boolean allBatteriesEmpty = true;
 				inner: for (Host host : hostList) {
 					EdgeDevice device = (EdgeDevice) host;
+
+					TraceUtil.trace("T5: EdgeDataCenterBroker.sendingDataToEdge() -> EdgeDevice.getCurrentBatteryCapacity()");
+
 					double current_battery_capacity = device.getCurrentBatteryCapacity();
+
 					if (current_battery_capacity > 0) {
 						allBatteriesEmpty = false;
 						break inner;
 					}
 
 				}
+
 				LogUtil.info("no available devices");
 				if (allBatteriesEmpty) {
 					LogUtil.info(
@@ -429,8 +518,17 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 	 * @param connectionHeader
 	 */
 	protected void submitCloudlets(ConnectionHeader connectionHeader) {
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.submitCloudlets() -> DataCenterBroker.submitCloudlets()");
+
 		super.submitCloudlets();
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.submitCloudlets() -> EdgeDataCenterBroker.checkAndSendCorrespondingReponse()");
+
 		this.checkAndSendCorrespondingReponse(connectionHeader);
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.submitCloudlets() -> EdgeDataCenterBroker.updateHostBattery()");
+
 		this.updateHostBattery(connectionHeader);
 	}
 
@@ -442,18 +540,44 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 	 */
 	private void checkAndSendCorrespondingReponse(ConnectionHeader connectionHeader) {
 		int vmId = connectionHeader.vmId;
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.checkAndSendCorrespondingReponse() -> " +
+				"EdgeDataCenter.getEntity()");
+
 		EdgeDataCenter entity = (EdgeDataCenter) CloudSim.getEntity(this.getVmsToDatacentersMap().get(vmId));
+
+		TraceUtil.trace("T5: EdgeDataCenterBroker.checkAndSendCorrespondingReponse() -> " +
+				"EdgeDataCenter.getHostList()");
+
 		List<Host> hostList = entity.getHostList();
 		EdgeDevice device = null;
 		for (Host host : hostList) {
+
+			TraceUtil.trace("T5: EdgeDataCenterBroker.checkAndSendCorrespondingReponse() -> " +
+					"Host.getVmList()");
+
 			List<Vm> vmList2 = host.getVmList();
+
 			for (Vm vm : vmList2) {
+
+				TraceUtil.trace("T5: EdgeDataCenterBroker.checkAndSendCorrespondingReponse() -> " +
+						"Vm.getId()");
+
 				if (vm.getId() == vmId) {
 					device = (EdgeDevice) host;
+
+					TraceUtil.trace("T5: EdgeDataCenterBroker.checkAndSendCorrespondingReponse() -> " +
+							"EdgeDevice.getPendingResponse()");
+
 					List<EdgeLet> pendingResponse = device.getPendingResponse();
+
 					Iterator<EdgeLet> iterator = pendingResponse.iterator();
 					while (iterator.hasNext()) {
 						EdgeLet edgeLet = iterator.next();
+
+						TraceUtil.trace("T5: EdgeDataCenterBroker.checkAndSendCorrespondingReponse() -> " +
+								"EdgeLet.getConnectionHeader()");
+
 						ConnectionHeader connectionHeader2 = edgeLet.getConnectionHeader();
 						int ioTId = connectionHeader2.ioTId;
 
@@ -462,6 +586,10 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 							iterator.remove();
 							LogUtil.info(CloudSim.clock() + " send pending cloudlet " + edgeLet.getCloudletId()
 									+ " from VM " + vmId + " to ioT " + ioTId);
+
+							TraceUtil.trace("T5: EdgeDataCenterBroker.checkAndSendCorrespondingReponse() -> " +
+									"SimEntity.send()");
+
 							this.send(connectionHeader.ioTId, this.getNetworkDelay(new DevicesInfo(ioTId, vmId)),
 									EdgeState.REQUEST_ACTUATING, edgeLet);
 						}
@@ -559,7 +687,7 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 
 			}
 
-		} 
+		}
 
 	}
 
