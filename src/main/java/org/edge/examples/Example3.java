@@ -40,6 +40,7 @@ import org.edge.entity.ConfiguationEntity.EdgeDatacenterCharacteristicsEntity;
 import org.edge.entity.ConfiguationEntity.HostEntity;
 import org.edge.entity.ConfiguationEntity.IotDeviceEntity;
 import org.edge.entity.ConfiguationEntity.LogEntity;
+import org.edge.entity.ConfiguationEntity.TraceEntity;
 import org.edge.entity.ConfiguationEntity.MELEntities;
 import org.edge.entity.ConfiguationEntity.MobilityEntity;
 import org.edge.entity.ConfiguationEntity.NetworkModelEntity;
@@ -62,6 +63,7 @@ import org.edge.utils.LogUtil;
 import org.edge.utils.LogUtil.Level;
 
 import com.google.gson.Gson;
+import org.edge.utils.TraceUtil;
 
 /**
  * this is another start up entrance, in which every single configuration was written in configuration file defined in resource directory.
@@ -72,198 +74,154 @@ import com.google.gson.Gson;
 @Configuration("configuration3.json")
 public class Example3 {
 
-	public void initFromConfiguation(ConfiguationEntity conf) {
-		this.initCloudSim(conf);
+	private static final String INDENT = "    ";
 
-		EdgeDataCenterBroker broker = this.createBroker(conf);
-		List<IoTDevice> edgeDevices=this.createIoTDevice(conf);
-
-		List<EdgeDataCenter> datacenters=this.createDataCenter(conf);
-		List<MicroELement> melList=this.createMEL(conf,broker);
-		List<ConnectionHeader>  header=this.setUpConnection(conf,edgeDevices,broker.getId());
-		
-		this.buildupEMLConnection(melList,conf.getMELEntities());			
-	
-		broker.submitVmList(melList);
-		broker.submitConnection(header);
-
-		this.initLog(conf);
-		String indent = "    ";
-		LogUtil.info("Start-exp");
-		LogUtil.info("Number of IoT "+indent+edgeDevices.size());
-		LogUtil.info("Config of IoT Battary"+indent+edgeDevices.get(0).getBattery().getCurrentCapacity());
-		CloudSim.startSimulation();
-		
-		
-		
-		
-		List<Cloudlet> cloudletReceivedList = broker.getCloudletReceivedList();
-		
-		printCloudletList(cloudletReceivedList, melList,datacenters);
-		LogUtil.simulationFinished();
-		
-		
-	}
 	private void buildupEMLConnection(List<MicroELement> vmList,	List<MELEntities> vmEntities) {
-		
-		// TODO Auto-generated method stub
+
 		for (MicroELement microELement : vmList) {
+
+			TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElement.getId()");
+
 			int id = microELement.getId();
 			MicroElementTopologyEntity topologyEntity = null;
+
 			inner :for ( MELEntities to : vmEntities) {
-				if(to.getMELTopology().getId()==id)
-				{
+
+				TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MELEntities.getMELTopology().getId()");
+
+				if(to.getMELTopology().getId()==id) {
+
+					TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MELEntities.getMELTopology()");
+
 					topologyEntity=to.getMELTopology();
-					break inner; 
-				}				
+					break inner;
+				}
 			}
-			
+
 			if(topologyEntity==null)
 				throw new MicroElementNotFoundException("cannot find topology for MicroElement "+id);
+
+			TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElementTopologyEntity.getUpLinkId()");
+
 			//find uplink and bind it
 			Integer upLinkId = topologyEntity.getUpLinkId();
+
 			if(upLinkId!=null) {
+
 				inner: for (MicroELement microELement2 : vmList) {
+
+					TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElement.getId()");
+
 					if(microELement2.getId()==upLinkId) {
+
+						TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElement.setUpLink()");
+
 						microELement.setUpLink(microELement2);
 						break inner;
 					}
 				}
-			if(microELement.getUpLink()==null)
-				throw new MicroElementNotFoundException("cannot find uplink "+upLinkId+" for MicroElement "+id);
+
+				TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElement.getUpLink()");
+
+				if(microELement.getUpLink()==null)
+					throw new MicroElementNotFoundException("cannot find uplink "+upLinkId+" for MicroElement "+id);
 			}
-			
+
+			TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElementTopologyEntity.getDownLinkIds()");
+
 			List<Integer> downLinkIds = topologyEntity.getDownLinkIds();
 			downLinkIds.remove(null);
 			List<MicroELement> downLink=new ArrayList<>();
+
+			TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElement.setDownLink()");
+
 			microELement.setDownLink(downLink);
+
 			for (Integer downLinkID : downLinkIds) {
 				//find the MEL having the same downLinkID
 				//and set the MEL to  microELement
-			
+
 				boolean found=false;
 				inner: for (MicroELement elm : vmList) {
-					
+
+					TraceUtil.trace("T3: Example3.buildupEMLConnection() -> MicroElement.getId()");
+
 					if(elm.getId()==downLinkID) {
+
 						if(downLink.contains(elm)) {
-							throw new  IllegalAccessError("the EML: "+id+"cannot bind the same downlink twice");							
+							throw new  IllegalAccessError("the EML: "+id+"cannot bind the same downlink twice");
 						}
 						downLink.add(elm);
 						found=true;
 						break inner;
-					}else 
+					}else
 					if(downLinkID==id) {
 						throw new  IllegalAccessError("the EML "+id+"'s downlink cannot be itself");
 					}
-					
+
 				}
 				if(!found) {
 					throw new  IllegalAccessError("cannot find the downlink: "+downLinkID+"for EML "+id);
-				}			
+				}
 			}
 		}
 	}
-	
+
 	private static void printCloudletList(List<Cloudlet> list,List<MicroELement>melList, List<EdgeDataCenter> datacenters ) {
 		int size = list.size();
 		Cloudlet edgeLet;
 
-		String indent = "    ";
 		LogUtil.info("========== OUTPUT ==========");
-		LogUtil.info("Edgelet ID" + indent + 
-				"MicroELement ID" + indent + "Execution Time" + indent
-				+ "Start Time" + indent + "Finish Time"+indent+ "Length" + indent + "Size");
+		LogUtil.info("Edgelet ID" + INDENT +
+				"MicroELement ID" + INDENT + "Execution Time" + INDENT
+				+ "Start Time" + INDENT + "Finish Time" + INDENT + "Length" + INDENT + "Size");
 
 		DecimalFormat dft = new DecimalFormat("0.00");
 		DecimalFormat idft = new DecimalFormat("000");
-		
+
 		for (int i = 0; i < size; i++) {
 			edgeLet = list.get(i);
-			//Log.print(indent + idft.format(edgeLet.getCloudletId()) + indent + indent);
+			//Log.print(INDENT + idft.format(edgeLet.getCloudletId()) + INDENT + INDENT);
 
 			if (edgeLet.getStatus() == Cloudlet.SUCCESS) {
-				
+
 				LogUtil.info(
-						indent + idft.format(edgeLet.getCloudletId()) + indent + indent+
-						  edgeLet.getVmId()+indent
-						+ indent + indent
-						+ dft.format(edgeLet.getActualCPUTime()) +indent + indent
-						+ indent  + dft.format(edgeLet.getExecStartTime())
-						+ indent  + indent
-						+ dft.format(edgeLet.getFinishTime())
-						+ indent  + indent +
-						edgeLet.getCloudletLength() 
-						+ indent  + indent +
-						edgeLet.getCloudletFileSize()
-					
-						);
+						INDENT + idft.format(edgeLet.getCloudletId()) + INDENT + INDENT +
+								edgeLet.getVmId() + INDENT
+								+ INDENT + INDENT
+								+ dft.format(edgeLet.getActualCPUTime()) + INDENT + INDENT
+								+ INDENT + dft.format(edgeLet.getExecStartTime())
+								+ INDENT + INDENT
+								+ dft.format(edgeLet.getFinishTime())
+								+ INDENT + INDENT +
+								edgeLet.getCloudletLength()
+								+ INDENT + INDENT +
+								edgeLet.getCloudletFileSize()
+
+				);
 			}
 		}
-		
-		
-		
-		
-		
-		edgeLet = list.get(list.size()-1);
+
+
+		edgeLet = list.get(list.size() - 1);
 		edgeLet.getUtilizationModelRam().getUtilization(0);
-			
-			//LogUtil.info(edgeLet = list.get());
-			System.out.println("HostList" + datacenters.get(0).getHostList().size());
-		
-			EdgeDevice e=(EdgeDevice)datacenters.get(0).getHostList().get(0);
-			LogUtil.info(" EdgeDevice Consumed energy, "+" Time"+edgeLet.getFinishTime());
-			//LogUtil.info(edgeLet = list.get());
-			if(datacenters.get(0).getHostList().size()>1)
-			{
-				e=(EdgeDevice)datacenters.get(0).getHostList().get(1);
-				LogUtil.info(" EdgeDevice Consumed energy, "+" Time"+edgeLet.getFinishTime());
 
-			}
-		
-			 
-			LogUtil.info("end-exp");
-	
-	
-		
-	}
-	/**
-	 * log initialization
-	 *
-	 * @param conf
-	 */
-	private void initLog(ConfiguationEntity conf) {
-		LogEntity logEntity = conf.getLogEntity();
-		boolean saveLogToFile = logEntity.isSaveLogToFile();
-		if(saveLogToFile) {
-			String logFilePath = logEntity.getLogFilePath();
-			String logLevel = logEntity.getLogLevel();
-			boolean append = logEntity.isAppend();
-			LogUtil.initLog(Level.valueOf(logLevel.toUpperCase()), logFilePath, saveLogToFile,append);
+		//LogUtil.info(edgeLet = list.get());
+		System.out.println("HostList" + datacenters.get(0).getHostList().size());
+
+		EdgeDevice e = (EdgeDevice) datacenters.get(0).getHostList().get(0);
+		LogUtil.info(" EdgeDevice Consumed energy, " + " Time" + edgeLet.getFinishTime());
+		//LogUtil.info(edgeLet = list.get());
+		if (datacenters.get(0).getHostList().size() > 1) {
+			e = (EdgeDevice) datacenters.get(0).getHostList().get(1);
+			LogUtil.info(" EdgeDevice Consumed energy, " + " Time" + edgeLet.getFinishTime());
+
 		}
 
 
-	}
+		LogUtil.info("end-exp");
 
-	/**
-	 * read configuration file and to init the whole program
-	 */
-	public void init() {
-		Configuration annotations = this.getClass().getAnnotation(Configuration.class);
-		String value = annotations.value();
-		
-		
-		if(value==null||value.isEmpty())
-		{
-			throw new IllegalArgumentException("configuration file required!");
-		}
 
-		InputStream resource = this.getClass().getClassLoader().getResourceAsStream(		value);
-		Gson gson = new Gson();
-		ConfiguationEntity conf = gson.fromJson(new InputStreamReader(resource), ConfiguationEntity.class);
-		
-	
-			this.initFromConfiguation(conf);
-		
 	}
 
 	/**
@@ -273,22 +231,32 @@ public class Example3 {
 	 * @param brokerId
 	 * @return
 	 */
-	private List<ConnectionHeader>   setUpConnection(ConfiguationEntity conf, List<IoTDevice> edgeDevices, int brokerId) {
+	private List<ConnectionHeader> setUpConnection(ConfiguationEntity conf, List<IoTDevice> edgeDevices, int brokerId) {
+
+		TraceUtil.trace("T2: Example3.setUpConnection() -> ConfigurationEntity.getConnections()");
+
 		List<ConnectionEntity> connections = conf.getConnections();
 		List<ConnectionHeader>  header=new ArrayList<>();
+
 		for (ConnectionEntity connectionEntity : connections) {
+
+			TraceUtil.trace("T2: Example3.setUpConnection() -> ConnectionEntity.getAssigmentIoTId()");
+
 			int assigmentIoTId = connectionEntity.getAssigmentIoTId();
 			for (IoTDevice edgeDevice : edgeDevices) {
 
+				TraceUtil.trace("T2: Example3.setUpConnection() -> IoTDevice.getAssigmentIoTId()");
+
 				if(edgeDevice.getAssigmentIoTId()==assigmentIoTId) {
+
+					TraceUtil.trace("T2: Example3.setUpConnection() -> ConnectionEntity.getVmId()");
+
 					int vmId = connectionEntity.getVmId();
 
 					header.add(new ConnectionHeader(vmId, edgeDevice.getId(), brokerId, edgeDevice.getNetworkModel().getCommunicationProtocol().getClass()));
 
-
 				}
 			}
-
 		}
 		return header;
 	}
@@ -300,41 +268,64 @@ public class Example3 {
 	 * @return
 	 */
 	private List<MicroELement> createMEL(ConfiguationEntity conf, EdgeDataCenterBroker broker) {
+
+		TraceUtil.trace("T3: Example3.createMEL() -> ConfiguationEntity.getMELEntities()");
+
 		List<MELEntities> melEntities = conf.getMELEntities();
 		List<MicroELement> vms=new ArrayList<>();
+
 		for (MELEntities melEntity : melEntities) {
-			
+
+			TraceUtil.trace("T3: Example3.createMEL() -> ConfiguationEntity.MELEntities.getCloudletSchedulerClassName()");
+
 			String cloudletSchedulerClassName = melEntity.getCloudletSchedulerClassName();
 			CloudletScheduler cloudletScheduler;
-			try {
-				String edgeOperationStr = melEntity.getEdgeOperationClass();
-				EdgeOperation edgeOperation = (EdgeOperation) Class.forName(edgeOperationStr).newInstance();
 
-				
+			try {
+
+				TraceUtil.trace("T3: Example3.createMEL() -> ConfiguationEntity.MELEntities.getEdgeOperationClass()");
+
+				String edgeOperationStr = melEntity.getEdgeOperationClass();
+
+				EdgeOperation edgeOperation = (EdgeOperation) Class.forName(edgeOperationStr).newInstance();
 				cloudletScheduler = (CloudletScheduler) Class.forName(cloudletSchedulerClassName).newInstance();
+
+				TraceUtil.trace("T3: Example3.createMEL() -> ConfiguationEntities.MELEntities.getDatasizeShrinkFactor()");
+
 				float datasizeShrinkFactor = melEntity.getDatasizeShrinkFactor();
+
+				TraceUtil.trace("T3: Example3.createMEL() -> ConfiguationEntity.MELEntities.getType()");
+
 				String type = melEntity.getType();
+
+				TraceUtil.trace("T3: Example3.createMEL() -> new MicroElement(...)");
+
 				MicroELement microELement=new MicroELement(melEntity.getVmid()	, broker.getId(),melEntity.getMips(),
 						melEntity.getPesNumber(),
 						melEntity.getRam(),melEntity.getBw(),melEntity.getSize(), melEntity.getVmm(), cloudletScheduler,
 						type,datasizeShrinkFactor
-						);
+				);
+
+				TraceUtil.trace("T3: Example3.createMEL() -> MicroElement.setEdgeOperation()");
+
 				microELement.setEdgeOperation(edgeOperation);
-				
+
 				vms.add(microELement);
+
+				TraceUtil.trace("T3: Example3.createMEL() -> ConfiguationEntity.MELEntities.getMELTopology()");
+
 				MicroElementTopologyEntity melTopology = melEntity.getMELTopology();
+
+				TraceUtil.trace("T3: Example3.createMEL() -> MicroElementTopologyEntity.getId()");
+
 				melTopology.setId(microELement.getId());
-				
+
 			} catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
 				e.printStackTrace();
 			}
-		
-			
 		}
 		return vms;
 	}
-
-
 
 	/**
 	 * create Iot Device from configuration
@@ -342,7 +333,6 @@ public class Example3 {
 	 * @return
 	 */
 	private List<IoTDevice> createIoTDevice(ConfiguationEntity conf) {
-		String indent = "    ";
 		List<IotDeviceEntity> ioTDeviceEntities = conf.getIoTDeviceEntities();
 		List<IoTDevice>  devices=new ArrayList<>();
 		for (IotDeviceEntity iotDeviceEntity : ioTDeviceEntities) {
@@ -371,20 +361,6 @@ public class Example3 {
 		return datacenters;
 
 	}
-	/**
-	 * init CloudSim
-	 * @param conf
-	 */
-	private void initCloudSim(ConfiguationEntity conf) {
-		int numUser = conf.getNumUser(); // number of cloud users
-		Calendar calendar = Calendar.getInstance(); // Calendar whose fields have been initialized with the current date
-		// and time.
-
-		//whether prining every single event in console
-		boolean trace_flag = conf.isTrace_flag(); // trace events
-
-		CloudSim.init(numUser, calendar, trace_flag);
-	}
 
 	private EdgeDataCenterBroker createBroker(ConfiguationEntity conf) {
 		BrokerEntity brokerEntity = conf.getBroker();
@@ -394,7 +370,7 @@ public class Example3 {
 
 	/**
 	 * Creates the datacenter.
-	 * @param name
+	 * @param entity
 	 *            the name
 	 *
 	 * @return the datacenter
@@ -437,8 +413,8 @@ public class Example3 {
 				edgeDevice.setMobility(location);
 
 				hostList.add(edgeDevice);
-			
-			
+
+
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -496,20 +472,20 @@ public class Example3 {
 		i=0;
 		for (String name : communicationNameSupported) {
 			switch(name.toLowerCase()) {
-			case "xmpp":
-				communicationClassSupported[i]=XMPPProtocol.class;
-				break;
-			case "coap":
-				communicationClassSupported[i]=CoAPProtocol.class;
-				break;
-			case "amqp":
-				communicationClassSupported[i]=AMQPProtocol.class;
-				break;
-			case "mqtt":
-				communicationClassSupported[i]=MQTTProtocol.class;
-				break;
-			default:
-				System.out.println("the protocol " +name+" has not been supported yet!");
+				case "xmpp":
+					communicationClassSupported[i]=XMPPProtocol.class;
+					break;
+				case "coap":
+					communicationClassSupported[i]=CoAPProtocol.class;
+					break;
+				case "amqp":
+					communicationClassSupported[i]=AMQPProtocol.class;
+					break;
+				case "mqtt":
+					communicationClassSupported[i]=MQTTProtocol.class;
+					break;
+				default:
+					System.out.println("the protocol " +name+" has not been supported yet!");
 			}
 			i++;
 		}
@@ -546,28 +522,28 @@ public class Example3 {
 		String upperCase = edgeType.toUpperCase();
 		EdgeType edgeType2=null;
 		switch(upperCase) {
-		case "RASPBERRY_PI":
-			edgeType2=EdgeType.RASPBERRY_PI;
-			break;
+			case "RASPBERRY_PI":
+				edgeType2=EdgeType.RASPBERRY_PI;
+				break;
 
-		case "SMART_ROUTER":
-			edgeType2=EdgeType.SMART_ROUTER;
+			case "SMART_ROUTER":
+				edgeType2=EdgeType.SMART_ROUTER;
 
-			break;
+				break;
 
-		case "UDOO_BOARD":
-			edgeType2=EdgeType.UDOO_BOARD;
+			case "UDOO_BOARD":
+				edgeType2=EdgeType.UDOO_BOARD;
 
-			break;
+				break;
 
-		case "MOBILE_PHONE":
-			edgeType2=EdgeType.MOBILE_PHONE;
+			case "MOBILE_PHONE":
+				edgeType2=EdgeType.MOBILE_PHONE;
 
-			break;
+				break;
 
-		default:
-			System.out.println("the edgeDevice type "+edgeType+" has not been supported yet!");
-			break;
+			default:
+				System.out.println("the edgeDevice type "+edgeType+" has not been supported yet!");
+				break;
 		}
 
 		return edgeType2;
@@ -609,7 +585,7 @@ public class Example3 {
 
 				IoTDevice newInstance = (IoTDevice) constructor.newInstance(networkModel);
 				newInstance.setAssigmentIoTId(iotDeviceEntity.getAssignmentId());
-				
+
 				newInstance.setBatteryDrainageRate(iotDeviceEntity.getBattery_drainage_rate());
 				newInstance.getBattery().setMaxCapacity(iotDeviceEntity.getMax_battery_capacity());
 				newInstance.getBattery().setCurrentCapacity(iotDeviceEntity.getMax_battery_capacity());
@@ -622,7 +598,7 @@ public class Example3 {
 					location.volecity=iotDeviceEntity.getMobilityEntity().getVolecity();
 				}
 				newInstance.setMobility(location);
-				
+
 				devices.add(newInstance);
 			}
 
@@ -643,57 +619,52 @@ public class Example3 {
 		communicationProtocolName = communicationProtocolName.toLowerCase();
 		CommunicationProtocol communicationProtocol = null;
 		switch (communicationProtocolName) {
-		case "xmpp":
-			communicationProtocol = new XMPPProtocol();
-			break;
-		case "mqtt":
-			communicationProtocol = new MQTTProtocol();
-			break;
-		case "coap":
-			communicationProtocol = new CoAPProtocol();
-			break;
-		case "amqp":
-			communicationProtocol = new AMQPProtocol();
-			break;
-		default:
-			System.out.println("have not supported protocol " + communicationProtocol + " yet!");
-			return null;
+			case "xmpp":
+				communicationProtocol = new XMPPProtocol();
+				break;
+			case "mqtt":
+				communicationProtocol = new MQTTProtocol();
+				break;
+			case "coap":
+				communicationProtocol = new CoAPProtocol();
+				break;
+			case "amqp":
+				communicationProtocol = new AMQPProtocol();
+				break;
+			default:
+				System.out.println("have not supported protocol " + communicationProtocol + " yet!");
+				return null;
 		}
 		String networkTypeName = networkModelEntity.getNetworkType();
 		networkTypeName = networkTypeName.toLowerCase();
 		NetworkType networkType = null;
 		switch (networkTypeName) {
-		case "wifi":
-			networkType = NetworkType.WIFI;
-			break;
-		case "wlan":
-			networkType = NetworkType.WLAN;
-			break;
-		case "4g":
-			networkType = NetworkType.FourG;
-			break;
-		case "3g":
-			networkType = NetworkType.ThreeG;
-			break;
-		case "bluetooth":
-			networkType = NetworkType.BLUETOOTH;
-			break;
-		case "lan":
-			networkType = NetworkType.LAN;
-			break;
-		default:
-			System.out.println("have not supported network type " + networkTypeName + " yet!");
-			return null;
+			case "wifi":
+				networkType = NetworkType.WIFI;
+				break;
+			case "wlan":
+				networkType = NetworkType.WLAN;
+				break;
+			case "4g":
+				networkType = NetworkType.FourG;
+				break;
+			case "3g":
+				networkType = NetworkType.ThreeG;
+				break;
+			case "bluetooth":
+				networkType = NetworkType.BLUETOOTH;
+				break;
+			case "lan":
+				networkType = NetworkType.LAN;
+				break;
+			default:
+				System.out.println("have not supported network type " + networkTypeName + " yet!");
+				return null;
 		}
 
 		NetworkModel networkModel = new NetworkModel(networkType);
 		networkModel.setCommunicationProtocol(communicationProtocol);
 		return networkModel;
-	}
-
-	public static void main(String[] args) {
-		Example3 startUp2 = new Example3();
-		startUp2.init();
 	}
 
 	private EdgeDataCenterBroker createBroker(String brokerName) {
@@ -705,5 +676,178 @@ public class Example3 {
 			return null;
 		}
 		return broker;
+	}
+
+	/**
+	 * log initialization
+	 *
+	 * @param conf
+	 */
+	private void initLog(ConfiguationEntity conf) {
+		LogEntity logEntity = conf.getLogEntity();
+		boolean saveLogToFile = logEntity.isSaveLogToFile();
+		if(saveLogToFile) {
+			String logFilePath = logEntity.getLogFilePath();
+			String logLevel = logEntity.getLogLevel();
+			boolean append = logEntity.isAppend();
+			LogUtil.initLog(Level.valueOf(logLevel.toUpperCase()), logFilePath, saveLogToFile,append);
+		}
+
+	}
+
+	/**
+	 * Trace Initialization
+	 * @param conf
+	 */
+	private void initTrace(ConfiguationEntity conf) {
+		TraceEntity traceEntity = conf.getTraceEntity();
+		String traceFilePath = traceEntity.getTraceFilePath();
+		TraceUtil.init(traceFilePath);
+	}
+
+	/**
+	 * init CloudSim
+	 * @param conf
+	 */
+	private void initCloudSim(ConfiguationEntity conf) {
+
+		TraceUtil.trace("T1: Example3.initCloudSim() -> ConfiguationEntity.getNumUser()");
+
+		int numUser = conf.getNumUser(); // number of cloud users
+
+		TraceUtil.trace("T1: Example3.initCloudSim() -> Calender.getInstance()");
+
+		Calendar calendar = Calendar.getInstance(); // Calendar whose fields have been initialized with the current date
+		// and time.
+
+		TraceUtil.trace("T1: Example3.initCloudSim() -> ConfiguationEntity.isTrace_flag()");
+
+		//whether printing every single event in console
+		boolean trace_flag = conf.isTrace_flag(); // trace events
+
+		TraceUtil.trace("T1: Example3.initCloudSim() -> CloudSim.init()");
+
+		CloudSim.init(numUser, calendar, trace_flag);
+	}
+
+	public void initFromConfiguation(ConfiguationEntity conf) {
+
+		TraceUtil.trace("T1: Example3.initFromConfiguation() -> Example3.initCloudSim()");
+
+		this.initCloudSim(conf);
+
+		TraceUtil.trace("T1: Example3.initFromConfiguation() -> Example3.createBroker()");
+
+		EdgeDataCenterBroker broker = this.createBroker(conf);
+
+		TraceUtil.trace("T1: Example3.initFromConfiguation() -> Example3.createIoTDevice()");
+
+		List<IoTDevice> edgeDevices=this.createIoTDevice(conf);
+
+		TraceUtil.trace("T1: Example3.initFromConfiguation() -> Example3.createDataCenter()");
+
+		List<EdgeDataCenter> datacenters=this.createDataCenter(conf);
+
+		TraceUtil.trace("");
+
+		/*
+		 * T2
+		 */
+
+		TraceUtil.trace("T2: Example3.initFromConfiguation() -> Example3.setUpConnection()");
+
+		List<ConnectionHeader>  header=this.setUpConnection(conf,edgeDevices,broker.getId());
+
+		TraceUtil.trace("");
+
+		/*
+		 * T3
+		 */
+
+		TraceUtil.trace("T3: Example3.initFromConfiguation() -> Example3.createMEL()");
+
+		List<MicroELement> melList=this.createMEL(conf,broker);
+
+		TraceUtil.trace("T3: Example3.initFromConfiguation() -> Example3.buildupEMLConnection()");
+
+		this.buildupEMLConnection(melList,conf.getMELEntities());
+
+		TraceUtil.trace("");
+
+		/*
+		 * EdgeDataCenter ----- connect to IoT devices -----> MEL
+		 */
+		broker.submitVmList(melList);
+		broker.submitConnection(header);
+
+		this.initLog(conf);
+
+		LogUtil.info("Start-exp");
+		LogUtil.info("Number of IoT "+ INDENT +edgeDevices.size());
+		LogUtil.info("Config of IoT Battery"+ INDENT +edgeDevices.get(0).getBattery().getCurrentCapacity());
+
+
+		/*
+		 * T4: IoTDevice.java
+		 *
+		 * T5: EdgeDataCenterBroker.java
+		 */
+
+		TraceUtil.trace("T4, T5: Example3.initFromConfiguration() -> CloudSim.startSimulation()");
+
+		CloudSim.startSimulation();
+
+		/*
+		 * Finish printing the traces.
+		 */
+		TraceUtil.endTrace();
+
+		/*
+		 * Last Step in Fig. 9: Print Results
+		 */
+
+		List<Cloudlet> cloudletReceivedList = broker.getCloudletReceivedList();
+
+		printCloudletList(cloudletReceivedList, melList,datacenters);
+
+		LogUtil.simulationFinished();
+
+	}
+
+	/**
+	 * read configuration file and to init the whole program
+	 */
+	public void init() {
+
+		Configuration annotations = this.getClass().getAnnotation(Configuration.class);
+		String value = annotations.value();
+
+		if(value==null||value.isEmpty())
+		{
+			throw new IllegalArgumentException("configuration file required!");
+		}
+
+		InputStream resource = this.getClass().getClassLoader().getResourceAsStream(		value);
+		Gson gson = new Gson();
+		ConfiguationEntity conf = gson.fromJson(new InputStreamReader(resource), ConfiguationEntity.class);
+
+		// initializing our own trace file
+		this.initTrace(conf);
+
+		TraceUtil.trace("Group 7");
+		TraceUtil.trace("2021H1030070H" + INDENT + "ABHISHEK");
+		TraceUtil.trace("2021H1030093H" + INDENT + "AVISHEK PAL");
+
+		TraceUtil.trace("");
+
+		TraceUtil.trace("T1: " + "Example3.init() -> Example3.initFromConfiguration()");
+
+		this.initFromConfiguation(conf);
+
+	}
+
+	public static void main(String[] args) {
+		Example3 startUp2 = new Example3();
+		startUp2.init();
 	}
 }
