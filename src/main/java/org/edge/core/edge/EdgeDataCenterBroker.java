@@ -105,6 +105,14 @@ public class EdgeDataCenterBroker extends DatacenterBroker {
 
 		EdgeLet data = (EdgeLet) ev.getData();
 
+		// project assignment 2
+		String jsonStr = "{" +
+				"\"Edgelet ID\": " + data.getCloudletId() + "," +
+				"\"Start Time\": " + data.getExecStartTime() + "," +
+				"\"Finish Time\": " + data.getFinishTime() +
+				"}";
+		TraceUtil.trace(jsonStr);
+
 		TraceUtil.trace("T5: EdgeDataCenterBroker.dataShrinkAndSendToDownLink() -> EdgeLet.getVmId()");
 
 		int vmId = data.getVmId();
