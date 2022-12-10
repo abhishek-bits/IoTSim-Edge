@@ -19,6 +19,13 @@ public class ConfiguationEntity {
 		private boolean append;
 	}
 
+	private TraceEntity traceEntity;
+
+	@Data
+	public static class TraceEntity {
+		private String traceFilePath;
+	}
+
 	private boolean trace_flag;
 	private int numUser;
 	private List<IotDeviceEntity> ioTDeviceEntities;
@@ -107,7 +114,7 @@ public class ConfiguationEntity {
 	 * resource double costPerMem = 0.05; // the cost of using memory in this
 	 * resource double costPerStorage = 0.001; // the cost of using storage in this
 	 * // resource double costPerBw = 0.0; // the cost of using bw in this resource
-	 * 
+	 *
 	 * @author cody
 	 *
 	 */
@@ -153,7 +160,7 @@ public class ConfiguationEntity {
 		String type;
 		String edgeOperationClass;
 		float datasizeShrinkFactor;
-		
+
 	}
 
 	@Data
