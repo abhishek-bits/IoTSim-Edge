@@ -158,7 +158,7 @@
 	"logEntity": {
 		"logLevel": "debug",
 		"saveLogToFile": "true",
-		"logFilePath": "Building.txt",
+		"logFilePath": "./logs/Building.txt",
 		"append": true
 	}
 }
